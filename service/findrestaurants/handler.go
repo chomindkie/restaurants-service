@@ -3,13 +3,12 @@ package findrestaurants
 import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/gommon/log"
-	"googlemaps.github.io/maps"
 	"net/http"
 	"restaurants-service/library/errs"
 )
 
 type Servicer interface {
-	FindRestaurant(c echo.Context, req Request) (*maps.PlacesSearchResponse, error)
+	FindRestaurant(c echo.Context, req Request) (*ResponseModel, error)
 }
 
 type Handler struct {

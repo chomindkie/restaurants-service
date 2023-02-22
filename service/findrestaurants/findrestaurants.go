@@ -2,6 +2,7 @@ package findrestaurants
 
 import (
 	"context"
+	"fmt"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/gommon/log"
 	"github.com/sirupsen/logrus"
@@ -11,6 +12,10 @@ import (
 	"restaurants-service/library/errs"
 	"restaurants-service/redisclient"
 	"time"
+)
+
+var (
+	SUCCESS = Status{Code: "SUCCESS", Message: "success"}
 )
 
 type Service struct {
@@ -23,7 +28,7 @@ func NewService(cache redisclient.Cacher) *Service {
 	}
 }
 
-func (s *Service) FindRestaurant(c echo.Context, request Request) (*maps.PlacesSearchResponse, error) {
+func (s *Service) FindRestaurant(c echo.Context, request Request) (*ResponseModel, error) {
 	// Specify the search criteria
 	radius := 1000 // in meters
 	types := "restaurant"
@@ -47,7 +52,11 @@ func (s *Service) FindRestaurant(c echo.Context, request Request) (*maps.PlacesS
 		}
 
 		// Find location
-		lat, lng := findLatLngByKeyword(keyword)
+		lat, lng, err := findLatLngByKeyword(keyword)
+
+		if err != nil {
+			return nil, err
+		}
 
 		// Set the location to search around
 		location := &maps.LatLng{Lat: lat, Lng: lng} // Default location: Bang Sue
@@ -61,24 +70,28 @@ func (s *Service) FindRestaurant(c echo.Context, request Request) (*maps.PlacesS
 		})
 
 		if err != nil {
-			logrus.Errorf("Error making request: %v", err)
-			return nil, errs.JSON(c, errs.New(http.StatusInternalServerError, errs.INTERNAL_ERROR.Code, ""))
+			logrus.Errorf("Error making request to NearbySearch: %v", err)
+			return nil, errs.New(http.StatusInternalServerError, errs.INTERNAL_ERROR.Code, fmt.Sprintf("Error making request to NearbySearch: %v", err))
 		}
 		results = &res
 
 		// Save to Redis
 		ttl, err := time.ParseDuration(viper.GetString("redis.ttl"))
 		if err != nil {
-			log.Errorf("ParseDuration redis.redeeming-ttl error: %s", err.Error())
-			return nil, errs.NewStatus(http.StatusInternalServerError, errs.INTERNAL_ERROR)
+			log.Errorf("ParseDuration redis.redeeming-ttl error: %s", err)
+			return nil, errs.New(http.StatusInternalServerError, errs.INTERNAL_ERROR.Code, fmt.Sprintf("ParseDuration redis.redeeming-ttl error: %s", err))
 		}
 		s.cache.SaveRestaurantsByKeyword(keyword, res, ttl)
 	}
 
-	return results, nil
+	res := &ResponseModel{
+		Status: SUCCESS,
+		Data:   results,
+	}
+	return res, nil
 }
 
-func findLatLngByKeyword(keyword string) (float64, float64) {
+func findLatLngByKeyword(keyword string) (float64, float64, error) {
 	apiKey := viper.GetString("apiKey")
 
 	// Create client
@@ -95,8 +108,13 @@ func findLatLngByKeyword(keyword string) (float64, float64) {
 	// Call the Geocode function
 	resp, err := client.Geocode(context.Background(), r)
 	if err != nil {
-		logrus.Errorf("Error making request: %v", err)
-		return 13.809082, 100.537801 // Default to Bang Sue
+		logrus.Errorf("Error making request to Geocode: %v", err)
+		return 0, 0, errs.New(http.StatusInternalServerError, errs.INTERNAL_ERROR.Code, fmt.Sprintf("Error making request to Geocode: %v", err))
+	}
+
+	if len(resp) == 0 {
+		logrus.Errorf("Not found Latitude Longitude of : %s", keyword)
+		return 0, 0, errs.New(http.StatusInternalServerError, errs.INTERNAL_ERROR.Code, fmt.Sprintf("Not found Latitude Longitude of : %s", keyword))
 	}
 
 	// Get the latitude and longitude
@@ -105,5 +123,5 @@ func findLatLngByKeyword(keyword string) (float64, float64) {
 
 	logrus.Printf("Find Restaurant in area %s Latitude: %f Longitude: %f", keyword, lat, lng)
 
-	return lat, lng
+	return lat, lng, nil
 }
