@@ -1,0 +1,18 @@
+app:
+  name: restaurants-service
+  version: 1.0.0
+  
+service:
+  port: 8443
+  read-timeout: 20
+  write-timeout: 20
+  cert-file: server.crt
+  key-file: server.key
+  skip-path: .*/info .*/health .*/metrics
+
+apiKey: AIzaSyCOVAk8nJ4nXU43HwzeBY34l1el4QHhliE
+
+redis:
+  host: localhost:6379
+  ttl: 3600s
+  db-index: 0
