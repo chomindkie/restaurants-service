@@ -3,7 +3,6 @@ package findrestaurants
 import (
 	"context"
 	"fmt"
-	"github.com/labstack/echo/v4"
 	"github.com/labstack/gommon/log"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
@@ -28,14 +27,14 @@ func NewService(cache redisclient.Cacher) *Service {
 	}
 }
 
-func (s *Service) FindRestaurant(c echo.Context, request Request) (*ResponseModel, error) {
+func (s *Service) GetListOfRestaurantByKeyword(request Request) (*ResponseModel, error) {
 	// Specify the search criteria
 	radius := 1000 // in meters
 	types := "restaurant"
 	keywordDefault := "Bang Sue"
 
 	keyword := request.Keyword
-	var results *maps.PlacesSearchResponse
+	var results *[]maps.PlacesSearchResult
 
 	if keyword == "" {
 		keyword = keywordDefault
@@ -61,19 +60,27 @@ func (s *Service) FindRestaurant(c echo.Context, request Request) (*ResponseMode
 		// Set the location to search around
 		location := &maps.LatLng{Lat: lat, Lng: lng} // Default location: Bang Sue
 
-		// Call the nearby search
-		res, err := client.NearbySearch(context.Background(), &maps.NearbySearchRequest{
+		req := maps.NearbySearchRequest{
 			Location: location,
 			Radius:   uint(radius),
 			Type:     maps.PlaceType(types),
 			Keyword:  keyword,
-		})
+		}
+
+		// Call the nearby search
+		res, err := client.NearbySearch(context.Background(), &req)
 
 		if err != nil {
 			logrus.Errorf("Error making request to NearbySearch: %v", err)
 			return nil, errs.New(http.StatusInternalServerError, errs.INTERNAL_ERROR.Code, fmt.Sprintf("Error making request to NearbySearch: %v", err))
 		}
-		results = &res
+
+		// Check if there are additional pages of results
+		if len(res.NextPageToken) > 0 {
+			findRestaurants(client, req, res.NextPageToken, res.Results)
+		}
+
+		results = &res.Results
 
 		// Save to Redis
 		ttl, err := time.ParseDuration(viper.GetString("redis.ttl"))
@@ -81,7 +88,7 @@ func (s *Service) FindRestaurant(c echo.Context, request Request) (*ResponseMode
 			log.Errorf("ParseDuration redis.redeeming-ttl error: %s", err)
 			return nil, errs.New(http.StatusInternalServerError, errs.INTERNAL_ERROR.Code, fmt.Sprintf("ParseDuration redis.redeeming-ttl error: %s", err))
 		}
-		s.cache.SaveRestaurantsByKeyword(keyword, res, ttl)
+		s.cache.SaveRestaurantsByKeyword(keyword, res.Results, ttl)
 	}
 
 	res := &ResponseModel{
@@ -89,6 +96,36 @@ func (s *Service) FindRestaurant(c echo.Context, request Request) (*ResponseMode
 		Data:   results,
 	}
 	return res, nil
+}
+
+func findRestaurants(client *maps.Client, request maps.NearbySearchRequest, nextPageToken string, list []maps.PlacesSearchResult) ([]maps.PlacesSearchResult, error) {
+	var nextPageResp maps.PlacesSearchResponse
+	var nextPageRequest maps.NearbySearchRequest
+
+	if len(nextPageToken) == 0 {
+		return list, nil
+	} else {
+		// Set up the search request for the next page of results
+		nextPageRequest := maps.NearbySearchRequest{
+			PageToken: nextPageToken,
+			Location:  request.Location,
+			Radius:    request.Radius,
+			Type:      request.Type,
+			Keyword:   request.Keyword,
+		}
+
+		// Perform the search request for the next page of results
+		var err error
+		nextPageResp, err = client.NearbySearch(context.Background(), &nextPageRequest)
+		if err != nil {
+			logrus.Errorf("Error making request to NearbySearch: %v", err)
+			return nil, errs.New(http.StatusInternalServerError, errs.INTERNAL_ERROR.Code, fmt.Sprintf("Error making request to NearbySearch: %v", err))
+		}
+
+	}
+
+	list = append(list, nextPageResp.Results...)
+	return findRestaurants(client, nextPageRequest, nextPageResp.NextPageToken, list)
 }
 
 func findLatLngByKeyword(keyword string) (float64, float64, error) {

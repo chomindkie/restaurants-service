@@ -25,6 +25,6 @@ func createRoutes(e *echo.Echo, cache *redisclient.Cache) {
 
 	g.GET("/info", infoHandler.Info)
 
-	g.POST("/v1/find", verifyVoucherHandler.FindRestaurant)
+	g.POST("/v1/find", verifyVoucherHandler.GetListOfRestaurantByKeyword)
 
 }

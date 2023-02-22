@@ -8,7 +8,7 @@ type Request struct {
 
 type ResponseModel struct {
 	Status Status                     `json:"status"`
-	Data   *maps.PlacesSearchResponse `json:"data,omitempty"`
+	Data   *[]maps.PlacesSearchResult `json:"data,omitempty"`
 }
 
 type Status struct {

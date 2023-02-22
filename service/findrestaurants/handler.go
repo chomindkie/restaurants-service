@@ -8,7 +8,7 @@ import (
 )
 
 type Servicer interface {
-	FindRestaurant(c echo.Context, req Request) (*ResponseModel, error)
+	GetListOfRestaurantByKeyword(req Request) (*ResponseModel, error)
 }
 
 type Handler struct {
@@ -21,7 +21,7 @@ func NewHandler(service Servicer) *Handler {
 	}
 }
 
-func (h *Handler) FindRestaurant(c echo.Context) error {
+func (h *Handler) GetListOfRestaurantByKeyword(c echo.Context) error {
 	var req Request
 
 	if err := c.Bind(&req); err != nil {
@@ -35,10 +35,10 @@ func (h *Handler) FindRestaurant(c echo.Context) error {
 	}
 
 	log.Info("Find Restaurant at ", req.Keyword)
-	res, err := h.service.FindRestaurant(c, req)
+	res, err := h.service.GetListOfRestaurantByKeyword(req)
 
 	if err != nil {
-		log.Errorf("call FindRestaurant error: ", err.Error())
+		log.Errorf("call GetListOfRestaurantByKeyword error: ", err.Error())
 		return errs.JSON(c, err)
 	}
 

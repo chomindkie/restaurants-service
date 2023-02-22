@@ -14,8 +14,8 @@ type Cache struct {
 }
 
 type Cacher interface {
-	GetRestaurantsByKeyword(key string) *maps.PlacesSearchResponse
-	SaveRestaurantsByKeyword(key string, response maps.PlacesSearchResponse, ttl time.Duration)
+	GetRestaurantsByKeyword(key string) *[]maps.PlacesSearchResult
+	SaveRestaurantsByKeyword(key string, response []maps.PlacesSearchResult, ttl time.Duration)
 }
 
 func New(redis *redis.Client) *Cache {
@@ -41,9 +41,9 @@ func NewCache(address string, dbIndex int) *Cache {
 	return c
 }
 
-func (c Cache) GetRestaurantsByKeyword(key string) *maps.PlacesSearchResponse {
+func (c Cache) GetRestaurantsByKeyword(key string) *[]maps.PlacesSearchResult {
 	// Create a new person object
-	var response maps.PlacesSearchResponse
+	var response []maps.PlacesSearchResult
 
 	result, err := c.Redis.Get(key).Result()
 	if err != nil {
@@ -60,7 +60,7 @@ func (c Cache) GetRestaurantsByKeyword(key string) *maps.PlacesSearchResponse {
 	return &response
 }
 
-func (c Cache) SaveRestaurantsByKeyword(key string, response maps.PlacesSearchResponse, ttl time.Duration) {
+func (c Cache) SaveRestaurantsByKeyword(key string, response []maps.PlacesSearchResult, ttl time.Duration) {
 	// Convert the PlacesSearchResponse to JSON
 	json, err := json.Marshal(response)
 	if err != nil {
