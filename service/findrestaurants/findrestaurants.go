@@ -18,11 +18,13 @@ var (
 )
 
 type Service struct {
+	place *maps.Client
 	cache redisclient.Cacher
 }
 
-func NewService(cache redisclient.Cacher) *Service {
+func NewService(place *maps.Client, cache redisclient.Cacher) *Service {
 	return &Service{
+		place: place,
 		cache: cache,
 	}
 }
@@ -44,14 +46,9 @@ func (s *Service) GetListOfRestaurantByKeyword(request Request) (*ResponseModel,
 	results = s.cache.GetRestaurantsByKeyword(keyword)
 
 	if results == nil {
-		apiKey := viper.GetString("apiKey")
-		client, err := maps.NewClient(maps.WithAPIKey(apiKey))
-		if err != nil {
-			panic(err)
-		}
 
 		// Find location
-		lat, lng, err := findLatLngByKeyword(keyword)
+		lat, lng, err := findLatLngByKeyword(s.place, keyword)
 
 		if err != nil {
 			return nil, err
@@ -68,19 +65,28 @@ func (s *Service) GetListOfRestaurantByKeyword(request Request) (*ResponseModel,
 		}
 
 		// Call the nearby search
-		res, err := client.NearbySearch(context.Background(), &req)
+		res, err := s.place.NearbySearch(context.Background(), &req)
 
 		if err != nil {
 			logrus.Errorf("Error making request to NearbySearch: %v", err)
 			return nil, errs.New(http.StatusInternalServerError, errs.INTERNAL_ERROR.Code, fmt.Sprintf("Error making request to NearbySearch: %v", err))
 		}
 
+		var allRes []maps.PlacesSearchResult
+		allRes = res.Results
+
 		// Check if there are additional pages of results
 		if len(res.NextPageToken) > 0 {
-			findRestaurants(client, req, res.NextPageToken, res.Results)
+			var errors error
+			allRes, errors = findRestaurants(s.place, req, res.NextPageToken, res.Results, 0)
+
+			if errors != nil {
+				allRes = res.Results
+			}
 		}
 
-		results = &res.Results
+		logrus.Infof("Total %v found with keyword: %s", len(allRes), keyword)
+		results = &allRes
 
 		// Save to Redis
 		ttl, err := time.ParseDuration(viper.GetString("redis.ttl"))
@@ -88,7 +94,7 @@ func (s *Service) GetListOfRestaurantByKeyword(request Request) (*ResponseModel,
 			log.Errorf("ParseDuration redis.redeeming-ttl error: %s", err)
 			return nil, errs.New(http.StatusInternalServerError, errs.INTERNAL_ERROR.Code, fmt.Sprintf("ParseDuration redis.redeeming-ttl error: %s", err))
 		}
-		s.cache.SaveRestaurantsByKeyword(keyword, res.Results, ttl)
+		s.cache.SaveRestaurantsByKeyword(keyword, allRes, ttl)
 	}
 
 	res := &ResponseModel{
@@ -98,13 +104,14 @@ func (s *Service) GetListOfRestaurantByKeyword(request Request) (*ResponseModel,
 	return res, nil
 }
 
-func findRestaurants(client *maps.Client, request maps.NearbySearchRequest, nextPageToken string, list []maps.PlacesSearchResult) ([]maps.PlacesSearchResult, error) {
+func findRestaurants(client *maps.Client, request maps.NearbySearchRequest, nextPageToken string, list []maps.PlacesSearchResult, attempts int) ([]maps.PlacesSearchResult, error) {
 	var nextPageResp maps.PlacesSearchResponse
 	var nextPageRequest maps.NearbySearchRequest
 
 	if len(nextPageToken) == 0 {
 		return list, nil
 	} else {
+		maskToken := "***" + nextPageToken[len(nextPageToken)-3:]
 		// Set up the search request for the next page of results
 		nextPageRequest := maps.NearbySearchRequest{
 			PageToken: nextPageToken,
@@ -114,28 +121,34 @@ func findRestaurants(client *maps.Client, request maps.NearbySearchRequest, next
 			Keyword:   request.Keyword,
 		}
 
-		// Perform the search request for the next page of results
+		/*
+		   Due to issue in google api that
+		   there is a short delay between when a next_page_token is issued, and when it will become valid,
+		   so we need to retry until it success
+		*/
+		time.Sleep(100 * time.Millisecond)
 		var err error
 		nextPageResp, err = client.NearbySearch(context.Background(), &nextPageRequest)
+
 		if err != nil {
-			logrus.Errorf("Error making request to NearbySearch: %v", err)
-			return nil, errs.New(http.StatusInternalServerError, errs.INTERNAL_ERROR.Code, fmt.Sprintf("Error making request to NearbySearch: %v", err))
+			if attempts == 20 {
+				logrus.Errorf("Error making request to NearbySearch: %v %s with token %s\n", err.Error(), request.Keyword, maskToken)
+				return nil, errs.New(http.StatusInternalServerError, errs.INTERNAL_ERROR.Code, fmt.Sprintf("Error making request to NearbySearch: %v", err))
+			} else if attempts != 20 {
+				attempts += 1
+				logrus.Errorf("Retry %v with pageToken %v\n", attempts, maskToken)
+				list, err = findRestaurants(client, request, nextPageToken, list, attempts)
+			}
+		} else {
+			logrus.Infof("Get list of restaurant success with pageToken %v\n", maskToken)
+			list = append(list, nextPageResp.Results...)
 		}
 
 	}
-
-	list = append(list, nextPageResp.Results...)
-	return findRestaurants(client, nextPageRequest, nextPageResp.NextPageToken, list)
+	return findRestaurants(client, nextPageRequest, nextPageResp.NextPageToken, list, 0)
 }
 
-func findLatLngByKeyword(keyword string) (float64, float64, error) {
-	apiKey := viper.GetString("apiKey")
-
-	// Create client
-	client, err := maps.NewClient(maps.WithAPIKey(apiKey))
-	if err != nil {
-		logrus.Fatalf("Error creating client: %v", err)
-	}
+func findLatLngByKeyword(client *maps.Client, keyword string) (float64, float64, error) {
 
 	// Create a request to the Geocoding API
 	r := &maps.GeocodingRequest{
