@@ -11,6 +11,7 @@ service:
   skip-path: .*/info .*/health .*/metrics
 
 apiKey: AIzaSyCOVAk8nJ4nXU43HwzeBY34l1el4QHhliE
+max-attempt: 20
 
 redis:
   host: localhost:6379

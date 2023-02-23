@@ -107,6 +107,7 @@ func (s *Service) GetListOfRestaurantByKeyword(request Request) (*ResponseModel,
 func findRestaurants(client *maps.Client, request maps.NearbySearchRequest, nextPageToken string, list []maps.PlacesSearchResult, attempts int) ([]maps.PlacesSearchResult, error) {
 	var nextPageResp maps.PlacesSearchResponse
 	var nextPageRequest maps.NearbySearchRequest
+	maxAttempt := viper.GetInt("max-attempt")
 
 	if len(nextPageToken) == 0 {
 		return list, nil
@@ -131,7 +132,7 @@ func findRestaurants(client *maps.Client, request maps.NearbySearchRequest, next
 		nextPageResp, err = client.NearbySearch(context.Background(), &nextPageRequest)
 
 		if err != nil {
-			if attempts == 20 {
+			if attempts == maxAttempt {
 				logrus.Errorf("Error making request to NearbySearch: %v %s with token %s\n", err.Error(), request.Keyword, maskToken)
 				return nil, errs.New(http.StatusInternalServerError, errs.INTERNAL_ERROR.Code, fmt.Sprintf("Error making request to NearbySearch: %v", err))
 			} else if attempts != 20 {
