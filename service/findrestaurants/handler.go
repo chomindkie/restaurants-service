@@ -2,7 +2,7 @@ package findrestaurants
 
 import (
 	"github.com/labstack/echo/v4"
-	"github.com/labstack/gommon/log"
+	"github.com/sirupsen/logrus"
 	"net/http"
 	"restaurants-service/library/errs"
 )
@@ -25,20 +25,19 @@ func (h *Handler) GetListOfRestaurantByKeyword(c echo.Context) error {
 	var req Request
 
 	if err := c.Bind(&req); err != nil {
-		log.Errorf("invalid request: %s", err.Error())
+		logrus.Errorf("invalid request: %s", err.Error())
 		return errs.JSON(c, errs.New(http.StatusBadRequest, errs.BAD_PARAM.Code, err.Error()))
 	}
 
 	if req.Keyword == "" {
-		log.Error("invalid request: Mobile is invalid")
+		logrus.Error("invalid request: keyword is invalid")
 		return errs.JSON(c, errs.New(http.StatusBadRequest, errs.BAD_PARAM.Code, "keyword should not null"))
 	}
 
-	log.Info("Find Restaurant at ", req.Keyword)
 	res, err := h.service.GetListOfRestaurantByKeyword(req)
 
 	if err != nil {
-		log.Errorf("call GetListOfRestaurantByKeyword error: ", err.Error())
+		logrus.Errorf("call GetListOfRestaurantByKeyword error: %v", err.Error())
 		return errs.JSON(c, err)
 	}
 
