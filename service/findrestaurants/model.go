@@ -15,7 +15,3 @@ type Status struct {
 	Message string `json:"message"`
 	Code    string `json:"code"`
 }
-
-//type Data struct {
-//	Voucher interface{} `json:"voucher"`
-//}

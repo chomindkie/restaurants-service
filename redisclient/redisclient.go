@@ -34,7 +34,7 @@ func NewCache(address string, dbIndex int) *Cache {
 	c.Redis = redis.NewClient(&options)
 	_, err := c.Redis.Ping().Result()
 	if err != nil {
-		//acnlog.Fatalf("cannot Ping redis: %s", err.Error())
+		logrus.Fatalf("cannot Ping redis: %s", err.Error())
 		return nil
 	}
 
@@ -42,7 +42,7 @@ func NewCache(address string, dbIndex int) *Cache {
 }
 
 func (c Cache) GetRestaurantsByKeyword(key string) *[]maps.PlacesSearchResult {
-	// Create a new person object
+	// Create a new []PlacesSearchResult object
 	var response []maps.PlacesSearchResult
 
 	result, err := c.Redis.Get(key).Result()
@@ -50,7 +50,7 @@ func (c Cache) GetRestaurantsByKeyword(key string) *[]maps.PlacesSearchResult {
 		return nil
 	}
 
-	// Unmarshal the JSON string into the PlacesSearchResponse
+	// Unmarshal the JSON string into the []PlacesSearchResul
 	err = json.Unmarshal([]byte(result), &response)
 	if err != nil {
 		return nil
@@ -61,7 +61,7 @@ func (c Cache) GetRestaurantsByKeyword(key string) *[]maps.PlacesSearchResult {
 }
 
 func (c Cache) SaveRestaurantsByKeyword(key string, response []maps.PlacesSearchResult, ttl time.Duration) {
-	// Convert the PlacesSearchResponse to JSON
+	// Convert the []PlacesSearchResult to JSON
 	json, err := json.Marshal(response)
 	if err != nil {
 		panic(err)
