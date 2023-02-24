@@ -3,7 +3,7 @@ package redisclient
 import (
 	"encoding/json"
 	"github.com/sirupsen/logrus"
-	"googlemaps.github.io/maps"
+	"restaurants-service/common"
 	"time"
 
 	"github.com/go-redis/redis/v7"
@@ -14,8 +14,8 @@ type Cache struct {
 }
 
 type Cacher interface {
-	GetRestaurantsByKeyword(key string) *[]maps.PlacesSearchResult
-	SaveRestaurantsByKeyword(key string, response []maps.PlacesSearchResult, ttl time.Duration)
+	GetRestaurantsByKeyword(key string) *[]common.PlacesSearchResult
+	SaveRestaurantsByKeyword(key string, response []common.PlacesSearchResult, ttl time.Duration)
 }
 
 func New(redis *redis.Client) *Cache {
@@ -41,9 +41,9 @@ func NewCache(address string, dbIndex int) *Cache {
 	return c
 }
 
-func (c Cache) GetRestaurantsByKeyword(key string) *[]maps.PlacesSearchResult {
+func (c Cache) GetRestaurantsByKeyword(key string) *[]common.PlacesSearchResult {
 	// Create a new []PlacesSearchResult object
-	var response []maps.PlacesSearchResult
+	var response []common.PlacesSearchResult
 
 	result, err := c.Redis.Get(key).Result()
 	if err != nil {
@@ -60,7 +60,7 @@ func (c Cache) GetRestaurantsByKeyword(key string) *[]maps.PlacesSearchResult {
 	return &response
 }
 
-func (c Cache) SaveRestaurantsByKeyword(key string, response []maps.PlacesSearchResult, ttl time.Duration) {
+func (c Cache) SaveRestaurantsByKeyword(key string, response []common.PlacesSearchResult, ttl time.Duration) {
 	// Convert the []PlacesSearchResult to JSON
 	json, err := json.Marshal(response)
 	if err != nil {

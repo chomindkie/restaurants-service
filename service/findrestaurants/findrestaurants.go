@@ -8,8 +8,10 @@ import (
 	"github.com/spf13/viper"
 	"googlemaps.github.io/maps"
 	"net/http"
+	"restaurants-service/common"
 	"restaurants-service/library/errs"
 	"restaurants-service/redisclient"
+	"strings"
 	"time"
 )
 
@@ -36,7 +38,7 @@ func (s *Service) GetListOfRestaurantByKeyword(request Request) (*ResponseModel,
 	keywordDefault := "Bang Sue"
 
 	keyword := request.Keyword
-	var results *[]maps.PlacesSearchResult
+	var results *[]common.PlacesSearchResult
 
 	if keyword == "" {
 		keyword = keywordDefault
@@ -49,7 +51,6 @@ func (s *Service) GetListOfRestaurantByKeyword(request Request) (*ResponseModel,
 
 		// Find location
 		lat, lng, err := findLatLngByKeyword(s.place, keyword)
-
 		if err != nil {
 			return nil, err
 		}
@@ -66,27 +67,25 @@ func (s *Service) GetListOfRestaurantByKeyword(request Request) (*ResponseModel,
 
 		// Call the nearby search
 		res, err := s.place.NearbySearch(context.Background(), &req)
-
 		if err != nil {
 			logrus.Errorf("Error making request to NearbySearch: %v", err)
 			return nil, errs.New(http.StatusInternalServerError, errs.INTERNAL_ERROR.Code, fmt.Sprintf("Error making request to NearbySearch: %v", err))
 		}
 
-		var allRes []maps.PlacesSearchResult
-		allRes = res.Results
+		// fist list of restaurants"s result
+		searchResultDto := getPlacesSearchResultDto(res)
 
 		// Check if there are additional pages of results
 		if len(res.NextPageToken) > 0 {
 			var errors error
-			allRes, errors = findRestaurants(s.place, req, res.NextPageToken, res.Results, 0)
-
-			if errors != nil {
-				allRes = res.Results
+			allSearchResultDto, errors := findRestaurants(s.place, req, res.NextPageToken, searchResultDto, 0)
+			if errors == nil {
+				searchResultDto = allSearchResultDto
 			}
 		}
 
-		logrus.Infof("Total %v found with keyword: %s", len(allRes), keyword)
-		results = &allRes
+		logrus.Infof("Total %v found with keyword: %s", len(searchResultDto), keyword)
+		results = &searchResultDto
 
 		// Save to Redis
 		ttl, err := time.ParseDuration(viper.GetString("redis.ttl"))
@@ -94,7 +93,7 @@ func (s *Service) GetListOfRestaurantByKeyword(request Request) (*ResponseModel,
 			log.Errorf("ParseDuration redis.redeeming-ttl error: %s", err)
 			return nil, errs.New(http.StatusInternalServerError, errs.INTERNAL_ERROR.Code, fmt.Sprintf("ParseDuration redis.redeeming-ttl error: %s", err))
 		}
-		s.cache.SaveRestaurantsByKeyword(keyword, allRes, ttl)
+		s.cache.SaveRestaurantsByKeyword(keyword, searchResultDto, ttl)
 	}
 
 	res := &ResponseModel{
@@ -104,7 +103,7 @@ func (s *Service) GetListOfRestaurantByKeyword(request Request) (*ResponseModel,
 	return res, nil
 }
 
-func findRestaurants(client *maps.Client, request maps.NearbySearchRequest, nextPageToken string, list []maps.PlacesSearchResult, attempts int) ([]maps.PlacesSearchResult, error) {
+func findRestaurants(client *maps.Client, request maps.NearbySearchRequest, nextPageToken string, list []common.PlacesSearchResult, attempts int) ([]common.PlacesSearchResult, error) {
 	var nextPageResp maps.PlacesSearchResponse
 	var nextPageRequest maps.NearbySearchRequest
 	maxAttempt := viper.GetInt("max-attempt")
@@ -142,7 +141,8 @@ func findRestaurants(client *maps.Client, request maps.NearbySearchRequest, next
 			}
 		} else {
 			logrus.Infof("Get list of restaurant success with pageToken %v\n", maskToken)
-			list = append(list, nextPageResp.Results...)
+			getPlacesSearchResultDto(nextPageResp)
+			list = append(list, getPlacesSearchResultDto(nextPageResp)...)
 		}
 
 	}
@@ -175,4 +175,25 @@ func findLatLngByKeyword(client *maps.Client, keyword string) (float64, float64,
 	logrus.Printf("Find Restaurant in area %s Latitude: %f Longitude: %f", keyword, lat, lng)
 
 	return lat, lng, nil
+}
+
+func getPlacesSearchResultDto(response maps.PlacesSearchResponse) []common.PlacesSearchResult {
+	var list []common.PlacesSearchResult
+	for _, item := range response.Results {
+		placesSearchResult := common.PlacesSearchResult{
+			Name:    item.Name,
+			PlaceID: item.PlaceID,
+			Rating:  item.Rating,
+			Image:   getImageUrl(item.Photos, item.Icon),
+		}
+		list = append(list, placesSearchResult)
+	}
+	return list
+}
+
+func getImageUrl(photo []maps.Photo, icon string) string {
+	if len(photo) != 0 {
+		return strings.Replace(viper.GetString("imageUrl"), "{photoReference}", photo[0].PhotoReference, -1)
+	}
+	return icon
 }

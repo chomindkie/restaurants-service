@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"github.com/labstack/echo/v4/middleware"
 	"os"
 	"os/signal"
 	"restaurants-service/library/errs"
@@ -37,9 +38,16 @@ func Start() {
 }
 
 func initEcho() *echo.Echo {
+	// Echo instance
 	e := echo.New()
 	e.HideBanner = true
 	e.HTTPErrorHandler = errs.HTTPErrorHandler
+
+	// Middleware
+	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
+		AllowOrigins: []string{"*"},
+		AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept},
+	}))
 	return e
 }
 
