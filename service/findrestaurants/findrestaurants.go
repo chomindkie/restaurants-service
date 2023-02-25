@@ -99,7 +99,6 @@ func (s *Service) GetListOfRestaurantByKeyword(request Request) (*ResponseModel,
 		}
 		s.cache.SaveRestaurantsByKeyword(keyword, searchResultDto, area, ttl)
 	} else {
-
 		// Found on Redis
 		restaurants = result.Restaurants
 		area = result.Area
@@ -197,7 +196,7 @@ func getPlacesSearchResultDto(response maps.PlacesSearchResponse) []common.Place
 		placesSearchResult := common.PlacesSearchResult{
 			Name:    item.Name,
 			PlaceID: item.PlaceID,
-			Rating:  item.Rating,
+			Rating:  fmt.Sprintf("%.1f", item.Rating),
 			Image:   getImageUrl(item.Photos, item.Icon),
 			Location: common.LatLng{
 				Lat: item.Geometry.Location.Lat,
