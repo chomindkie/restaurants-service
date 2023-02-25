@@ -202,6 +202,7 @@ func getPlacesSearchResultDto(response maps.PlacesSearchResponse) []common.Place
 				Lat: item.Geometry.Location.Lat,
 				Lng: item.Geometry.Location.Lng,
 			},
+			Vicinity: item.Vicinity,
 		}
 		list = append(list, placesSearchResult)
 	}

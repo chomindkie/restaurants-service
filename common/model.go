@@ -5,7 +5,8 @@ type PlacesSearchResult struct {
 	PlaceID  string `json:"placeId,omitempty"`
 	Rating   string `json:"rating,omitempty"`
 	Image    string `json:"image,omitempty"`
-	Location LatLng `json:"area,omitempty"`
+	Location LatLng `json:"location,omitempty"`
+	Vicinity string `json:"vicinity,omitempty"`
 }
 
 type LatLng struct {
