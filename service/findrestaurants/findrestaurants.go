@@ -36,30 +36,34 @@ func (s *Service) GetListOfRestaurantByKeyword(request Request) (*ResponseModel,
 	radius := 1000 // in meters
 	types := "restaurant"
 	keywordDefault := "Bang Sue"
+	var lat float64
+	var lng float64
 
 	keyword := request.Keyword
-	var results *[]common.PlacesSearchResult
+	var restaurants *[]common.PlacesSearchResult
+	var area *maps.LatLng
 
 	if keyword == "" {
 		keyword = keywordDefault
 	}
 
 	// Find in redis
-	results = s.cache.GetRestaurantsByKeyword(keyword)
+	result := s.cache.GetRestaurantsByKeyword(keyword)
 
-	if results == nil {
-
+	if result == nil {
+		// Not found on Redis
+		var err error
 		// Find location
-		lat, lng, err := findLatLngByKeyword(s.place, keyword)
+		lat, lng, err = findLatLngByKeyword(s.place, keyword)
 		if err != nil {
 			return nil, err
 		}
 
 		// Set the location to search around
-		location := &maps.LatLng{Lat: lat, Lng: lng} // Default location: Bang Sue
+		area = &maps.LatLng{Lat: lat, Lng: lng}
 
 		req := maps.NearbySearchRequest{
-			Location: location,
+			Location: area,
 			Radius:   uint(radius),
 			Type:     maps.PlaceType(types),
 			Keyword:  keyword,
@@ -75,7 +79,7 @@ func (s *Service) GetListOfRestaurantByKeyword(request Request) (*ResponseModel,
 		// fist list of restaurants"s result
 		searchResultDto := getPlacesSearchResultDto(res)
 
-		// Check if there are additional pages of results
+		// Check if there are additional pages of restaurants
 		if len(res.NextPageToken) > 0 {
 			var errors error
 			allSearchResultDto, errors := findRestaurants(s.place, req, res.NextPageToken, searchResultDto, 0)
@@ -85,7 +89,7 @@ func (s *Service) GetListOfRestaurantByKeyword(request Request) (*ResponseModel,
 		}
 
 		logrus.Infof("Total %v found with keyword: %s", len(searchResultDto), keyword)
-		results = &searchResultDto
+		restaurants = &searchResultDto
 
 		// Save to Redis
 		ttl, err := time.ParseDuration(viper.GetString("redis.ttl"))
@@ -93,12 +97,22 @@ func (s *Service) GetListOfRestaurantByKeyword(request Request) (*ResponseModel,
 			log.Errorf("ParseDuration redis.redeeming-ttl error: %s", err)
 			return nil, errs.New(http.StatusInternalServerError, errs.INTERNAL_ERROR.Code, fmt.Sprintf("ParseDuration redis.redeeming-ttl error: %s", err))
 		}
-		s.cache.SaveRestaurantsByKeyword(keyword, searchResultDto, ttl)
-	}
+		s.cache.SaveRestaurantsByKeyword(keyword, searchResultDto, area, ttl)
+	} else {
 
+		// Found on Redis
+		restaurants = result.Restaurants
+		area = result.Area
+	}
 	res := &ResponseModel{
 		Status: SUCCESS,
-		Data:   results,
+		Data: &Data{
+			Restaurants: restaurants,
+			Area: &common.LatLng{
+				Lat: area.Lat,
+				Lng: area.Lng,
+			},
+		},
 	}
 	return res, nil
 }
@@ -185,6 +199,10 @@ func getPlacesSearchResultDto(response maps.PlacesSearchResponse) []common.Place
 			PlaceID: item.PlaceID,
 			Rating:  item.Rating,
 			Image:   getImageUrl(item.Photos, item.Icon),
+			Location: common.LatLng{
+				Lat: item.Geometry.Location.Lat,
+				Lng: item.Geometry.Location.Lng,
+			},
 		}
 		list = append(list, placesSearchResult)
 	}
@@ -195,5 +213,5 @@ func getImageUrl(photo []maps.Photo, icon string) string {
 	if len(photo) != 0 {
 		return strings.Replace(viper.GetString("imageUrl"), "{photoReference}", photo[0].PhotoReference, -1)
 	}
-	return icon
+	return ""
 }

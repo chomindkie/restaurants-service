@@ -2,7 +2,9 @@ package redisclient
 
 import (
 	"encoding/json"
+	"github.com/mitchellh/mapstructure"
 	"github.com/sirupsen/logrus"
+	"googlemaps.github.io/maps"
 	"restaurants-service/common"
 	"time"
 
@@ -14,8 +16,8 @@ type Cache struct {
 }
 
 type Cacher interface {
-	GetRestaurantsByKeyword(key string) *[]common.PlacesSearchResult
-	SaveRestaurantsByKeyword(key string, response []common.PlacesSearchResult, ttl time.Duration)
+	GetRestaurantsByKeyword(key string) *RestaurantResult
+	SaveRestaurantsByKeyword(key string, response []common.PlacesSearchResult, area *maps.LatLng, ttl time.Duration)
 }
 
 func New(redis *redis.Client) *Cache {
@@ -41,32 +43,54 @@ func NewCache(address string, dbIndex int) *Cache {
 	return c
 }
 
-func (c Cache) GetRestaurantsByKeyword(key string) *[]common.PlacesSearchResult {
-	// Create a new []PlacesSearchResult object
-	var response []common.PlacesSearchResult
+func (c Cache) GetRestaurantsByKeyword(key string) *RestaurantResult {
+	var restaurantList *RestaurantResult
 
-	result, err := c.Redis.Get(key).Result()
+	result, err := c.Redis.HGetAll(key).Result()
 	if err != nil {
 		return nil
 	}
 
-	// Unmarshal the JSON string into the []PlacesSearchResul
-	err = json.Unmarshal([]byte(result), &response)
+	redisResult := new(RedisResult)
+	err = mapstructure.Decode(result, redisResult)
 	if err != nil {
 		return nil
 	}
 
-	logrus.Infof("%s Found on Redis", key)
-	return &response
+	if result != nil {
+		var restaurants *[]common.PlacesSearchResult
+		var area *maps.LatLng
+
+		err = json.Unmarshal([]byte(redisResult.Restaurants), &restaurants)
+		if err != nil {
+			return nil
+		}
+
+		err = json.Unmarshal([]byte(redisResult.Area), &area)
+		if err != nil {
+			return nil
+		}
+
+		restaurantList = &RestaurantResult{
+			Restaurants: restaurants,
+			Area:        area,
+		}
+		logrus.Infof("%s Found on Redis", key)
+	}
+	return restaurantList
 }
 
-func (c Cache) SaveRestaurantsByKeyword(key string, response []common.PlacesSearchResult, ttl time.Duration) {
-	// Convert the []PlacesSearchResult to JSON
-	json, err := json.Marshal(response)
+func (c Cache) SaveRestaurantsByKeyword(key string, response []common.PlacesSearchResult, area *maps.LatLng, ttl time.Duration) {
+	responseJson, err := json.Marshal(response)
 	if err != nil {
 		panic(err)
 	}
 
-	c.Redis.Set(key, json, ttl)
+	areaJson, err := json.Marshal(area)
+	if err != nil {
+		panic(err)
+	}
+
+	c.Redis.HSet(key, "restaurants", responseJson, "area", areaJson)
 	logrus.Infof("%s Save on Redis", key)
 }
