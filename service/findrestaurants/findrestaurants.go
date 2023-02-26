@@ -178,7 +178,7 @@ func findLatLngByKeyword(client *maps.Client, keyword string) (float64, float64,
 
 	if len(resp) == 0 {
 		logrus.Errorf("Not found Latitude Longitude of : %s", keyword)
-		return 0, 0, errs.New(http.StatusInternalServerError, errs.INTERNAL_ERROR.Code, fmt.Sprintf("Not found Latitude Longitude of : %s", keyword))
+		return 0, 0, errs.NewWithData(200, "ERROR", fmt.Sprintf("Not found Latitude Longitude of : %s", keyword), nil)
 	}
 
 	// Get the latitude and longitude

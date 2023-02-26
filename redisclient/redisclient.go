@@ -6,6 +6,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"googlemaps.github.io/maps"
 	"restaurants-service/common"
+	"strings"
 	"time"
 
 	"github.com/go-redis/redis/v7"
@@ -46,6 +47,7 @@ func NewCache(address string, dbIndex int) *Cache {
 func (c Cache) GetRestaurantsByKeyword(key string) *RestaurantResult {
 	var restaurantList *RestaurantResult
 
+	key = strings.ToLower(key)
 	result, err := c.Redis.HGetAll(key).Result()
 	if err != nil {
 		return nil
@@ -81,6 +83,8 @@ func (c Cache) GetRestaurantsByKeyword(key string) *RestaurantResult {
 }
 
 func (c Cache) SaveRestaurantsByKeyword(key string, response []common.PlacesSearchResult, area *maps.LatLng, ttl time.Duration) {
+
+	key = strings.ToLower(key)
 	responseJson, err := json.Marshal(response)
 	if err != nil {
 		panic(err)
