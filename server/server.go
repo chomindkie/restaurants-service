@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"github.com/labstack/echo/v4/middleware"
 	"os"
 	"os/signal"
@@ -28,10 +27,8 @@ func Start() {
 
 	go func() {
 		servicePort := viper.GetString("service.port")
-		serviceCert := viper.GetString("service.cert-file")
-		serviceKey := viper.GetString("service.key-file")
-		fmt.Printf("Starting application server on port: %s", servicePort)
-		e.Logger.Fatal(e.StartTLS(":"+servicePort, getAbsFilePath(serviceCert), getAbsFilePath(serviceKey)))
+		e.Logger.Fatal(e.Start(":" + servicePort))
+
 	}()
 
 	gracefulShutdown(e)
