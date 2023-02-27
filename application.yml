@@ -6,8 +6,6 @@ service:
   port: 8443
   read-timeout: 20
   write-timeout: 20
-  cert-file: server.crt
-  key-file: server.key
   skip-path: .*/info .*/health .*/metrics
 
 apiKey: AIzaSyCOVAk8nJ4nXU43HwzeBY34l1el4QHhliE
