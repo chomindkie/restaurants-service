@@ -15,13 +15,13 @@ max-attempt: 20
 imageUrl: https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photo_reference={photoReference}&key=AIzaSyCOVAk8nJ4nXU43HwzeBY34l1el4QHhliE
 
 # When start with docker-compose
-redis:
-  host: redis:6379
-  ttl: 3600s
-  db-index: 0
-
-# When start with local
 #redis:
-#  host: localhost:6379
+#  host: redis:6379
 #  ttl: 3600s
 #  db-index: 0
+
+# When start with local
+redis:
+  host: localhost:6379
+  ttl: 3600s
+  db-index: 0
