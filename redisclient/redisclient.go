@@ -36,6 +36,7 @@ func NewCache(address string, dbIndex int) *Cache {
 
 	c.Redis = redis.NewClient(&options)
 	_, err := c.Redis.Ping().Result()
+
 	if err != nil {
 		logrus.Fatalf("cannot Ping redis: %s", err.Error())
 		return nil
